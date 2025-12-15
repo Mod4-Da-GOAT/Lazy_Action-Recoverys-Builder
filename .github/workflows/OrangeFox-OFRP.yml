@@ -16,14 +16,17 @@ on:
           - 8.1
           - 7.1
           - 6.0
+
       DEVICE_TREE:
         description: 'Device Tree Repository'
         required: true
         default: 'https://gitlab.com/YOUR_USERNAME/android_device_samsung_a23'
+
       DEVICE_TREE_BRANCH:
         description: 'Device Tree Branch'
         required: true
         default: 'android-14_ofrp'
+
       BUILD_TARGET:
         description: 'Build Target'
         required: true
@@ -33,6 +36,17 @@ on:
           - boot
           - recovery
           - vendorboot
+
+      LDCHECK:
+        description: 'Run LDCheck'
+        required: false
+        default: false
+        type: boolean
+
+      LDCHECKPATH:
+        description: 'Path of blobs to check'
+        required: true
+        default: 'system/bin/qseecomd'
 
 jobs:
   build:
@@ -82,7 +96,7 @@ jobs:
             --branch ${{ inputs.MANIFEST_BRANCH }} \
             --path $GITHUB_WORKSPACE/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
 
-      - name: Clone device tree (CORRECT PATH)
+      - name: Clone device tree (correct layout)
         run: |
           cd $GITHUB_WORKSPACE/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
           mkdir -p device/samsung
@@ -92,10 +106,9 @@ jobs:
           cd device/samsung/a23
           echo "COMMIT_ID=$(git rev-parse HEAD)" >> $GITHUB_ENV
 
-      - name: Verify device tree layout
+      - name: Verify device tree
         run: |
-          cd $GITHUB_WORKSPACE/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
-          ls device/samsung/a23/AndroidProducts.mk
+          ls $GITHUB_WORKSPACE/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/device/samsung/a23/AndroidProducts.mk
 
       - name: Build OrangeFox
         run: |
@@ -114,9 +127,18 @@ jobs:
             mka ${{ inputs.BUILD_TARGET }}image
           fi
 
-      - name: Set build date
+      - name: Run LDCheck
+        if: inputs.LDCHECK == true
+        continue-on-error: true
         run: |
-          echo "BUILD_DATE=$(date +%Y%m%d)" >> $GITHUB_ENV
+          cd $GITHUB_WORKSPACE/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
+          OUT=out/target/product/a23/recovery/root
+          cp -n tools/ldcheck $OUT/
+          cp -n tools/libneeds $OUT/
+          cd $OUT
+          python3 ldcheck \
+            -p system/lib64:vendor/lib64:system/lib:vendor/lib \
+            -d ${{ inputs.LDCHECKPATH }}
 
       - name: Upload build
         uses: softprops/action-gh-release@master
@@ -124,7 +146,7 @@ jobs:
           files: |
             OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/a23/OrangeFox*.img
             OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/a23/OrangeFox*.zip
-          name: OrangeFox a23 | ${{ env.BUILD_DATE }}
+          name: OrangeFox a23
           tag_name: ${{ github.run_id }}
           body: |
             Device: Samsung Galaxy A23 4G
