@@ -129,21 +129,21 @@ jobs:
         sudo apt-get install python2 python-is-python2
 
     - name: Building OrangeFox
-     run: |
-      cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
-      source build/envsetup.sh
-      export ALLOW_MISSING_DEPENDENCIES=true
+      run: |
+       cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
+       source build/envsetup.sh
+       export ALLOW_MISSING_DEPENDENCIES=true
 
-      if [ "${{ inputs.MANIFEST_BRANCH }}" = "11.0" ] || \
-         [ "${{ inputs.MANIFEST_BRANCH }}" = "12.1" ]; then
-          lunch twrp_a23-eng
-          mka clean
-          mka adbd ${{ inputs.BUILD_TARGET }}image
-      else
-          lunch omni_a23-eng
-          mka clean
-          mka ${{ inputs.BUILD_TARGET }}image
-      fi
+       if [ "${{ inputs.MANIFEST_BRANCH }}" = "11.0" ] || \
+          [ "${{ inputs.MANIFEST_BRANCH }}" = "12.1" ]; then
+           lunch twrp_a23-eng
+           mka clean
+           mka adbd ${{ inputs.BUILD_TARGET }}image
+       else
+           lunch omni_a23-eng
+           mka clean
+           mka ${{ inputs.BUILD_TARGET }}image
+       fi
 
     - name: Set Build Date # For Build Date Info, currently using Asia/Manila
       run: |
