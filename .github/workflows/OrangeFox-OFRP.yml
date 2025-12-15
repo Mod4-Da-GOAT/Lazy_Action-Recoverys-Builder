@@ -1,56 +1,13 @@
 name: OrangeFox [OFRP]
 
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
-    inputs:
-      MANIFEST_BRANCH:
-        description: 'OrangeFox Manifest Branch'
-        required: true
-        default: '12.1'
-        type: choice
-        options:
-          - 12.1
-          - 11.0
-          - 10.0
-          - 9.0
-          - 8.1
-          - 7.1
-          - 6.0
-
-      DEVICE_TREE:
-        description: 'Device Tree Repository'
-        required: true
-        default: 'https://gitlab.com/YOUR_USERNAME/android_device_samsung_a23'
-
-      DEVICE_TREE_BRANCH:
-        description: 'Device Tree Branch'
-        required: true
-        default: 'android-14_ofrp'
-
-      BUILD_TARGET:
-        description: 'Build Target'
-        required: true
-        default: 'recovery'
-        type: choice
-        options:
-          - boot
-          - recovery
-          - vendorboot
-
-      LDCHECK:
-        description: 'Run LDCheck'
-        required: false
-        default: false
-        type: boolean
-
-      LDCHECKPATH:
-        description: 'Path of blobs to check'
-        required: true
-        default: 'system/bin/qseecomd'
 
 jobs:
   build:
-    name: Build OrangeFox (a23)
+    name: Build OrangeFox
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -62,94 +19,107 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Set up job
+      run: echo "Starting OrangeFox build job"
 
-      - name: Clean workspace
-        uses: rokibhasansagar/slimhub_actions@main
+    - name: Checkout
+      uses: actions/checkout@v4
 
-      - name: Setup swap
-        uses: pierotofy/set-swap-space@master
-        with:
-          swap-size-gb: 12
+    - name: Send Start Notification
+      run: |
+        echo "Build started for Samsung Galaxy A23 4G"
 
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt -y upgrade
-          sudo apt -y install \
-            gperf gcc-multilib g++-multilib libc6-dev \
-            lib32ncurses5-dev lib32z1-dev liblz4-tool \
-            libncurses5-dev libsdl1.2-dev libxml2-utils \
-            lzop pngcrush schedtool squashfs-tools \
-            imagemagick libbz2-dev lzma ncftp \
-            qemu-user-static libstdc++-10-dev \
-            python3 repo bc ccache
+    - name: Display Inputs
+      run: |
+        echo "Branch: 12.1"
+        echo "Device: a23"
+        echo "Target: recovery"
 
-      - name: Sync OrangeFox source
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/OrangeFox
-          cd $GITHUB_WORKSPACE/OrangeFox
-          git clone https://gitlab.com/OrangeFox/sync.git
-          cd sync
-          ./orangefox_sync.sh \
-            --branch ${{ inputs.MANIFEST_BRANCH }} \
-            --path $GITHUB_WORKSPACE/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
+    - name: Clean-up
+      uses: rokibhasansagar/slimhub_actions@main
 
-      - name: Clone device tree (correct layout)
-        run: |
-          cd $GITHUB_WORKSPACE/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
-          mkdir -p device/samsung
-          git clone ${{ inputs.DEVICE_TREE }} \
-            -b ${{ inputs.DEVICE_TREE_BRANCH }} \
-            device/samsung/a23
-          cd device/samsung/a23
-          echo "COMMIT_ID=$(git rev-parse HEAD)" >> $GITHUB_ENV
+    - name: Swap Space
+      uses: pierotofy/set-swap-space@master
+      with:
+        swap-size-gb: 12
 
-      - name: Verify device tree
-        run: |
-          ls $GITHUB_WORKSPACE/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/device/samsung/a23/AndroidProducts.mk
+    - name: Prepare the environment
+      run: |
+        sudo apt update
+        sudo apt -y install \
+          gperf gcc-multilib g++-multilib libc6-dev \
+          lib32ncurses5-dev lib32z1-dev liblz4-tool \
+          libncurses5-dev libsdl1.2-dev libxml2-utils \
+          lzop pngcrush schedtool squashfs-tools \
+          imagemagick libbz2-dev lzma ncftp \
+          qemu-user-static libstdc++-10-dev \
+          python3 repo bc ccache
 
-      - name: Build OrangeFox
-        run: |
-          cd $GITHUB_WORKSPACE/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
-          source build/envsetup.sh
-          export ALLOW_MISSING_DEPENDENCIES=true
+    - name: Set-up Manifest
+      run: |
+        mkdir -p $GITHUB_WORKSPACE/OrangeFox
+        cd $GITHUB_WORKSPACE/OrangeFox
+        git clone https://gitlab.com/OrangeFox/sync.git
+        cd sync
+        ./orangefox_sync.sh --branch 12.1 --path \
+          $GITHUB_WORKSPACE/OrangeFox/fox_12.1
 
-          if [ "${{ inputs.MANIFEST_BRANCH }}" = "11.0" ] || \
-             [ "${{ inputs.MANIFEST_BRANCH }}" = "12.1" ]; then
-            lunch twrp_a23-eng
-            mka clean
-            mka adbd ${{ inputs.BUILD_TARGET }}image
-          else
-            lunch omni_a23-eng
-            mka clean
-            mka ${{ inputs.BUILD_TARGET }}image
-          fi
+    - name: Clone Device Tree
+      run: |
+        cd $GITHUB_WORKSPACE/OrangeFox/fox_12.1
+        mkdir -p device/samsung
+        git clone https://gitlab.com/YOUR_USERNAME/android_device_samsung_a23 \
+          -b android-14_ofrp device/samsung/a23
+        cd device/samsung/a23
+        echo "COMMIT_ID=$(git rev-parse HEAD)" >> $GITHUB_ENV
 
-      - name: Run LDCheck
-        if: inputs.LDCHECK == true
-        continue-on-error: true
-        run: |
-          cd $GITHUB_WORKSPACE/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
-          OUT=out/target/product/a23/recovery/root
-          cp -n tools/ldcheck $OUT/
-          cp -n tools/libneeds $OUT/
-          cd $OUT
-          python3 ldcheck \
-            -p system/lib64:vendor/lib64:system/lib:vendor/lib \
-            -d ${{ inputs.LDCHECKPATH }}
+    - name: Extracting variables from .mk file
+      run: |
+        echo "Skipped – variables are fixed for a23"
 
-      - name: Upload build
-        uses: softprops/action-gh-release@master
-        with:
-          files: |
-            OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/a23/OrangeFox*.img
-            OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/a23/OrangeFox*.zip
-          name: OrangeFox a23
-          tag_name: ${{ github.run_id }}
-          body: |
-            Device: Samsung Galaxy A23 4G
-            Branch: ${{ inputs.MANIFEST_BRANCH }}
-            Tree: ${{ inputs.DEVICE_TREE }}
-            Commit: ${{ env.COMMIT_ID }}
+    - name: Installing python2 for legacy builds
+      if: false
+      run: echo "Not required for 12.1"
+
+    - name: Building OrangeFox
+      run: |
+        cd $GITHUB_WORKSPACE/OrangeFox/fox_12.1
+        source build/envsetup.sh
+        export ALLOW_MISSING_DEPENDENCIES=true
+        lunch twrp_a23-eng
+        mka clean
+        mka adbd recoveryimage
+
+    - name: Set Build Date
+      run: |
+        echo "BUILD_DATE=$(date +%Y%m%d)" >> $GITHUB_ENV
+
+    - name: Check if Recovery Exist
+      run: |
+        ls out/target/product/a23/OrangeFox*.img
+
+    - name: Upload to Release
+      if: success()
+      uses: softprops/action-gh-release@master
+      with:
+        files: |
+          OrangeFox/fox_12.1/out/target/product/a23/OrangeFox*.img
+        tag_name: ${{ github.run_id }}
+
+    - name: Send Success Notification
+      if: success()
+      run: echo "Build completed successfully"
+
+    - name: Send Failure Notification
+      if: failure()
+      run: echo "Build failed"
+
+    - name: Run LDCheck
+      if: false
+      run: echo "LDCheck disabled"
+
+    - name: Post Checkout
+      run: echo "Post build cleanup"
+
+    - name: Complete job
+      run: echo "Job completed"
