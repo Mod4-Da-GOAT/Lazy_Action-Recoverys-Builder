@@ -9,236 +9,125 @@ on:
         default: '12.1'
         type: choice
         options:
-        - 12.1
-        - 11.0
-        - 10.0
-        - 9.0
-        - 8.1
-        - 7.1
-        - 6.0
+          - 12.1
+          - 11.0
+          - 10.0
+          - 9.0
+          - 8.1
+          - 7.1
+          - 6.0
       DEVICE_TREE:
-        description: 'Custom Recovery Tree'
+        description: 'Device Tree Repository'
         required: true
-        default: 'https://github.com/lazycodebuilder/recovery_rmx1851'
+        default: 'https://gitlab.com/YOUR_USERNAME/android_device_samsung_a23'
       DEVICE_TREE_BRANCH:
-        description: 'Custom Recovery Tree Branch'
+        description: 'Device Tree Branch'
         required: true
         default: 'android-14_ofrp'
       BUILD_TARGET:
-        description: 'Specify your Build Target'
+        description: 'Build Target'
         required: true
         default: 'recovery'
         type: choice
         options:
-        - boot
-        - recovery
-        - vendorboot
-      LDCHECK:
-        description: 'Use LDCHECK'
-        required: false
-        default: 'false'
-        type: boolean
-      LDCHECKPATH:
-        description: 'Path of blobs to check' # Use it know what kind of dependencies your missing for decryption blobs.
-        required: true
-        default: 'system/bin/qseecomd'
+          - boot
+          - recovery
+          - vendorboot
 
 jobs:
   build:
-    name: Build OFRP by ${{ github.actor }}
+    name: Build OrangeFox (a23)
     runs-on: ubuntu-latest
-    if: github.event.repository.owner.id == github.event.sender.id
-    env:
-      PRODUCT_RELEASE_NAME: a23
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       contents: write
+
+    env:
+      PRODUCT_RELEASE_NAME: a23
+      DEVICE_NAME: a23
+      DEVICE_VENDOR: samsung
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Send Start Notification
-      run: |
-        ACTION_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-        curl -X POST https://api.telegram.org/bot5477489617:AAHFxTxuvPGgGM_QmoWtIYBPouv-OnTHL64/sendMessage \
-          -d chat_id="-1001538361307" \
-          -d text="🚀 Build Started for OrangeFox Recovery
-           Device: Samsung A23 4G
-           Description: initial build
-           Manifest Branch: ${{ inputs.MANIFEST_BRANCH }}
-           Device Tree: ${{ inputs.DEVICE_TREE }} (Branch: ${{ inputs.DEVICE_TREE_BRANCH }})
-           View Actions: $ACTION_URL"
+      - name: Clean workspace
+        uses: rokibhasansagar/slimhub_actions@main
 
-    - name: Display Inputs
-      run: |
-        echo "Displaying variables/inputs."
-        echo "Manifest Branch: ${{ inputs.MANIFEST_BRANCH }}"
-        echo "Device Tree: ${{ inputs.DEVICE_TREE }}"
-        echo "Device Branch: ${{ inputs.DEVICE_TREE_BRANCH }}"
-        echo "Build Target: ${{ inputs.BUILD_TARGET }}image"
-              
-    - name: Clean-up
-      uses: rokibhasansagar/slimhub_actions@main
+      - name: Setup swap
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 12
 
-    - name: Swap Space
-      uses: pierotofy/set-swap-space@master
-      with:
-        swap-size-gb: 12
-      
-    - name: Prepare the environment
-      run: |
-        sudo apt update
-        sudo apt -y upgrade
-        sudo apt -y install gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib libc6-dev x11proto-core-dev libx11-dev tree lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev libxml2 lzop pngcrush schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp qemu-user-static libstdc++-10-dev libgflags-dev python3 repo
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt -y upgrade
+          sudo apt -y install \
+            gperf gcc-multilib g++-multilib libc6-dev \
+            lib32ncurses5-dev lib32z1-dev liblz4-tool \
+            libncurses5-dev libsdl1.2-dev libxml2-utils \
+            lzop pngcrush schedtool squashfs-tools \
+            imagemagick libbz2-dev lzma ncftp \
+            qemu-user-static libstdc++-10-dev \
+            python3 repo bc ccache
 
-    - name: Set-up Manifest
-      run: |
-        mkdir -p ${GITHUB_WORKSPACE}/OrangeFox
-        cd ${GITHUB_WORKSPACE}/OrangeFox
-        git config --global user.name "lazycodebuilder"
-        git config --global user.email "154446636+lazycodebuilder@users.noreply.github.com"
-        git clone https://gitlab.com/OrangeFox/sync.git
-        if [ ${{ inputs.MANIFEST_BRANCH }} == '11.0' ] || [ ${{ inputs.MANIFEST_BRANCH }} == '12.1' ]; then
-            echo "Sync fox_${{ inputs.MANIFEST_BRANCH }} branch"
-            echo "CHECK_LEGACY_BRANCH=false" >> $GITHUB_ENV
-            cd sync
-            ./orangefox_sync.sh --branch ${{ inputs.MANIFEST_BRANCH }} --path ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
-        else
-            echo "Sync legacy fox_${{ inputs.MANIFEST_BRANCH }} branch"
-            echo "CHECK_LEGACY_BRANCH=true" >> $GITHUB_ENV
-            cd sync/legacy
-            ./orangefox_sync_legacy.sh --branch ${{ inputs.MANIFEST_BRANCH }} --path ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
-        fi
+      - name: Sync OrangeFox source
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/OrangeFox
+          cd $GITHUB_WORKSPACE/OrangeFox
+          git clone https://gitlab.com/OrangeFox/sync.git
+          cd sync
+          ./orangefox_sync.sh \
+            --branch ${{ inputs.MANIFEST_BRANCH }} \
+            --path $GITHUB_WORKSPACE/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
 
-    - name: Clone Device Tree
-      run: |
-        cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
-        git clone ${{ inputs.DEVICE_TREE }} -b ${{ inputs.DEVICE_TREE_BRANCH }} ./device_tree
-        cd device_tree
-        echo "COMMIT_ID=$(git rev-parse HEAD)" >> $GITHUB_ENV
+      - name: Clone device tree (CORRECT PATH)
+        run: |
+          cd $GITHUB_WORKSPACE/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
+          mkdir -p device/samsung
+          git clone ${{ inputs.DEVICE_TREE }} \
+            -b ${{ inputs.DEVICE_TREE_BRANCH }} \
+            device/samsung/a23
+          cd device/samsung/a23
+          echo "COMMIT_ID=$(git rev-parse HEAD)" >> $GITHUB_ENV
 
-    - name: Extracting variables from .mk file
-      run: |
-        cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/device_tree
-        # Initialize variables
-        DEVICE_MAKEFILE=""
-        DEVICE_DIRECTORY=""
-        DEVICE_NAME=""
-        # Loop through each .mk file in the current directory
-        for file in *.mk; do
-            # Extract variables using sed
-            makefile=$(sed -n 's/^[[:space:]]*PRODUCT_NAME[[:space:]]*:=\s*\(.*\)/\1/p' "$file")
-            brand=$(sed -n 's/^[[:space:]]*PRODUCT_BRAND[[:space:]]*:=\s*\(.*\)/\1/p' "$file")
-            codename=$(sed -n 's/^[[:space:]]*PRODUCT_DEVICE[[:space:]]*:=\s*\(.*\)/\1/p' "$file")
-            if [[ -n "$makefile" && -n "$brand" && -n "$codename" ]]; then
-                DEVICE_MAKEFILE="$makefile"
-                DEVICE_DIRECTORY="device/$brand"
-                DEVICE_NAME="$codename"
-                echo "DEVICE_MAKEFILE=${DEVICE_MAKEFILE}" >> $GITHUB_ENV
-                echo "DEVICE_NAME=${DEVICE_NAME}" >> $GITHUB_ENV
-                echo "DEVICE_DIRECTORY=${DEVICE_DIRECTORY}" >> $GITHUB_ENV
-                break
-            fi
-        done
-        # Navigate to the parent directory
-        cd ../
-        # Create the necessary directories
-        echo "Creating directory: $DEVICE_DIRECTORY"
-        mkdir -p "$DEVICE_DIRECTORY"
-        # Move device_tree folder to device_directory and rename it to $DEVICE_NAME
-        echo "Moving device_tree to $DEVICE_DIRECTORY/$DEVICE_NAME"
-        mv device_tree "$DEVICE_DIRECTORY"/"$DEVICE_NAME"
+      - name: Verify device tree layout
+        run: |
+          cd $GITHUB_WORKSPACE/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
+          ls device/samsung/a23/AndroidProducts.mk
 
-    - name: Installing python2 for legacy builds
-      if: env.CHECK_LEGACY_BRANCH == 'true'
-      run: |
-        sudo apt-get install python2 python-is-python2
+      - name: Build OrangeFox
+        run: |
+          cd $GITHUB_WORKSPACE/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
+          source build/envsetup.sh
+          export ALLOW_MISSING_DEPENDENCIES=true
 
-    - name: Building OrangeFox
-      run: |
-        cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
-        set +e
-        source build/envsetup.sh
-        export ALLOW_MISSING_DEPENDENCIES=true
-        set -e
-        if [ ${{ inputs.MANIFEST_BRANCH }} == '11.0' ] || [ ${{ inputs.MANIFEST_BRANCH }} == '12.1' ]; then
-            lunch twrp_${{ env.DEVICE_NAME }}-eng && make clean && mka adbd ${{ inputs.BUILD_TARGET }}image
-        else
-            lunch omni_${{ env.DEVICE_NAME }}-eng && make clean && mka ${{ inputs.BUILD_TARGET }}image
-        fi
+          if [ "${{ inputs.MANIFEST_BRANCH }}" = "11.0" ] || \
+             [ "${{ inputs.MANIFEST_BRANCH }}" = "12.1" ]; then
+            lunch twrp_a23-eng
+            mka clean
+            mka adbd ${{ inputs.BUILD_TARGET }}image
+          else
+            lunch omni_a23-eng
+            mka clean
+            mka ${{ inputs.BUILD_TARGET }}image
+          fi
 
-    - name: Set Build Date # For Build Date Info, currently using Asia/Manila
-      run: |
-        echo "BUILD_DATE=$(TZ=Asia/Manila date +%Y%m%d)" >> $GITHUB_ENV
+      - name: Set build date
+        run: |
+          echo "BUILD_DATE=$(date +%Y%m%d)" >> $GITHUB_ENV
 
-    - name: Check if Recovery Exist
-      run: |
-        cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
-        if [ -f out/target/product/${{ env.DEVICE_NAME }}/OrangeFox*.img ]; then
-            echo "CHECK_IMG_IS_OK=true" >> $GITHUB_ENV
-            echo "MD5_IMG=$(md5sum out/target/product/${{ env.DEVICE_NAME }}/OrangeFox*.img | cut -d ' ' -f 1)" >> $GITHUB_ENV
-        else
-            echo "Recovery out directory is empty."
-        fi
-        if [ -f out/target/product/${{ env.DEVICE_NAME }}/OrangeFox*.zip ]; then
-            echo "CHECK_ZIP_IS_OK=true" >> $GITHUB_ENV
-            echo "MD5_ZIP=$(md5sum out/target/product/${{ env.DEVICE_NAME }}/OrangeFox*.zip | cut -d ' ' -f 1)" >> $GITHUB_ENV
-        else
-            echo "Recovery out directory is empty."
-        fi
-
-    - name: Upload to Release
-      if: env.CHECK_IMG_IS_OK == 'true' && env.CHECK_ZIP_IS_OK == 'true'
-      uses: softprops/action-gh-release@master
-      with:
-        files: |
-          OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/${{ env.DEVICE_NAME }}/OrangeFox*.img
-          OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/${{ env.DEVICE_NAME }}/OrangeFox*.img.tar
-          OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/${{ env.DEVICE_NAME }}/OrangeFox*.zip
-          OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/${{ env.DEVICE_NAME }}/ramdisk-recovery.*
-        name: Unofficial OrangeFox for ${{ env.DEVICE_NAME }} // ${{ env.BUILD_DATE }}
-        tag_name: ${{ github.run_id }}
-        body: |
-          Build: ${{ inputs.MANIFEST_BRANCH }}
-          Device: [Device Tree/Branch](${{ inputs.DEVICE_TREE }}/tree/${{ inputs.DEVICE_TREE_BRANCH }})
-          Commit: Most recent [commit](${{ inputs.DEVICE_TREE }}/commit/${{ env.COMMIT_ID }}) during building.
-          MD5 (img): ${{ env.MD5_IMG }}
-          MD5 (zip): ${{ env.MD5_ZIP }}
-
-    - name: Send Success Notification
-      if: success()
-      run: |
-        RELEASE_LINK="https://github.com/${{ github.repository }}/releases"
-        curl -X POST https://api.telegram.org/bot5477489617:AAHFxTxuvPGgGM_QmoWtIYBPouv-OnTHL64/sendMessage \
-          -d chat_id="-1001538361307" \
-          -d text="🎉 Build Finished Successfully
-          Device: Samsung A23 4G
-          Description: initial build for OrangeFox Recovery
-          Manifest Branch: ${{ inputs.MANIFEST_BRANCH }}
-          Device Tree: ${{ inputs.DEVICE_TREE }} (Branch: ${{ inputs.DEVICE_TREE_BRANCH }})
-          Download TWRP: $RELEASE_LINK"
-
-    - name: Send Failure Notification
-      if: failure()
-      run: |
-        ACTION_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-        curl -X POST https://api.telegram.org/bot5477489617:AAHFxTxuvPGgGM_QmoWtIYBPouv-OnTHL64/sendMessage \
-          -d chat_id="-1001538361307" \
-          -d text="❌ Build Failed
-           Device: Samsung A23 4G
-           Description: initial build for OrangeFox Recovery
-           Manifest Branch: ${{ inputs.MANIFEST_BRANCH }}
-           Device Tree: ${{ inputs.DEVICE_TREE }} (Branch: ${{ inputs.DEVICE_TREE_BRANCH }})
-           View Actions: $ACTION_URL"
-
-          
-    - name: Run LDCheck
-      if: inputs.LDCHECK == 'true'
-      run: |
-        cd tools
-        mv -n libneeds ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/${{ env.DEVICE_NAME }}/recovery/root/
-        mv -n ldcheck ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/${{ env.DEVICE_NAME }}/recovery/root/
-        cd ../OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/${{ env.DEVICE_NAME }}/recovery/root
-        python3 ldcheck -p system/lib64:vendor/lib64:system/lib:vendor/lib -d ${{ inputs.LDCHECKPATH }}
-        echo "Done checking missing dependencies. Review, and reconfigure your tree."
-      continue-on-error: true
+      - name: Upload build
+        uses: softprops/action-gh-release@master
+        with:
+          files: |
+            OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/a23/OrangeFox*.img
+            OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/a23/OrangeFox*.zip
+          name: OrangeFox a23 | ${{ env.BUILD_DATE }}
+          tag_name: ${{ github.run_id }}
+          body: |
+            Device: Samsung Galaxy A23 4G
+            Branch: ${{ inputs.MANIFEST_BRANCH }}
+            Tree: ${{ inputs.DEVICE_TREE }}
+            Commit: ${{ env.COMMIT_ID }}
