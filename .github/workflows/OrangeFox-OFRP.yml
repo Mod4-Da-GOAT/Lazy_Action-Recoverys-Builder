@@ -120,8 +120,8 @@ jobs:
         git clone ${{ inputs.DEVICE_TREE }} \
           -b ${{ inputs.DEVICE_TREE_BRANCH }} \
           device/samsung/a23
-       cd device/samsung/a23
-       echo "COMMIT_ID=$(git rev-parse HEAD)" >> $GITHUB_ENV
+        cd device/samsung/a23
+        echo "COMMIT_ID=$(git rev-parse HEAD)" >> $GITHUB_ENV
 
     - name: Installing python2 for legacy builds
       if: env.CHECK_LEGACY_BRANCH == 'true'
